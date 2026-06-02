@@ -220,7 +220,7 @@ def predict_future(days=7):
     
     last_date = df['date_hour'].max()
     future_end = last_date + timedelta(days=days)
-    future_dates = pd.date_range(start=last_date + timedelta(hours=1), periods=days*24, freq='h')
+    future_dates = pd.date_range(start=last_date + timedelta(hours=1), periods=days*24, freq=pd.Timedelta(hours=1))
     
     try:
         df_future_raw = load_from_database(DB_CONFIG, start_date=last_date + timedelta(hours=1), end_date=future_end)

@@ -69,7 +69,7 @@ TIME_FEATURES = {
 def load_sample_data():
     """加载示例数据用于演示"""
     np.random.seed(42)
-    dates = pd.date_range(start='2025-01-01', end='2025-12-31', freq='H')
+    dates = pd.date_range(start='2025-01-01', end='2025-12-31', freq=pd.Timedelta(hours=1))
     df = pd.DataFrame({
         'date_hour': dates,
         'price_day_ahead_avg': np.random.normal(500, 100, len(dates)),
