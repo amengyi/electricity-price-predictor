@@ -9,29 +9,15 @@ warnings.filterwarnings('ignore')
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 
-import os
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
-import psycopg2
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from sqlalchemy import create_engine
 
-# 忽略警告
-import warnings
-warnings.filterwarnings('ignore')
-
-# pandas 显示设置
-pd.set_option('display.max_rows', None)
-pd.set_option('display.max_columns', None)
-
-# 注册 numpy.int64 适配器
 psycopg2.extensions.register_adapter(np.int64, psycopg2._psycopg.AsIs)
 
-# 数据库连接
+# 源数据库连接 - 从环境变量读取
 OUTER_HOST = 'pgm-bp100hm7m50ii06z.pg.rds.aliyuncs.com'
 INNER_HOST = 'pgm-bp100hm7m50ii06z.pg.rds.aliyuncs.com'
 
@@ -41,10 +27,14 @@ try:
 except KeyError:
     HOST = OUTER_HOST
 
-USER = 'reader_anhui'
-DATABASE = 'bopha_anhui'
-PASSWORD = 'LCIPtzpl15ZJJD2'
-PORT = '5432'
+USER = os.environ.get('SOURCE_DB_USER', 'reader_anhui')
+DATABASE = os.environ.get('SOURCE_DB_NAME', 'bopha_anhui')
+PASSWORD = os.environ.get('SOURCE_DB_PASSWORD', '')
+PORT = os.environ.get('SOURCE_DB_PORT', '5432')
+
+if not PASSWORD:
+    print("警告：SOURCE_DB_PASSWORD 环境变量未设置！")
+    exit(1)
 
 CONN = psycopg2.connect(f'postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}')
 
@@ -251,37 +241,37 @@ df = pd.read_sql('''
     ''', CONN)
 print(df.head())
 
-# 关闭数据库连接（良好习惯）
 CONN.close()
 
 # --- 第二部分：定义目标数据库连接 ---
-target_username = 'seniverse'
-target_password = 'mpr3uOFnnM5bHtl'
-target_host = 'pgm-bp1q60i1ca0xnwv98o.pg.rds.aliyuncs.com'
-target_port = '1921'
-target_database = 'bopha'
+# 从环境变量读取目标数据库配置
+target_username = os.environ.get('DB_USER', 'seniverse')
+target_password = os.environ.get('DB_PASSWORD', '')
+target_host = os.environ.get('DB_HOST', 'pgm-bp1q60i1ca0xnwv98o.pg.rds.aliyuncs.com')
+target_port = os.environ.get('DB_PORT', '1921')
+target_database = os.environ.get('DB_NAME', 'bopha')
 table_name = 'anhui_hourly_spot_cleared_wide'
 
-# 创建 SQLAlchemy 引擎用于 to_sql (仅用于写入数据)
+if not target_password:
+    print("警告：DB_PASSWORD 环境变量未设置！")
+    exit(1)
+
+# 创建 SQLAlchemy 引擎用于 to_sql
 engine_url = f'postgresql+psycopg2://{target_username}:{target_password}@{target_host}:{target_port}/{target_database}'
 engine = create_engine(engine_url)
 
-# 创建 psycopg2 连接用于执行 DDL (建表和加注释)
+# 创建 psycopg2 连接用于执行 DDL
 conn_str = f"dbname={target_database} user={target_username} password={target_password} host={target_host} port={target_port}"
 conn = psycopg2.connect(conn_str)
 cursor = conn.cursor()
 
 try:
-    # 1. 如果表已存在，先删除（因为你之前用的是 replace，这里为了演示重新建表）
-    # 如果不想删除，可以注释掉下面这行，并在建表语句前加判断
     cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
     
-    # 2. 手动编写 CREATE TABLE 语句 (在此处指定精确类型)
-    # 注意：PostgreSQL 中时间戳通常用 TIMESTAMPTZ 或 TIMESTAMP
     create_table_sql = f"""
     CREATE TABLE {table_name} (
-        date_hour               TIMESTAMPTZ PRIMARY KEY,  -- 指定为主键，时间类型
-        price_day_ahead_avg     NUMERIC(10, 4),           -- 指定精度，避免浮点数误差
+        date_hour               TIMESTAMPTZ PRIMARY KEY,
+        price_day_ahead_avg     NUMERIC(10, 4),
         total_wind_solar_pre_avg NUMERIC(10, 2),
         cloud_avg               NUMERIC(10, 2),
         dir_avg                 NUMERIC(10, 2),
@@ -308,40 +298,34 @@ try:
     cursor.execute(create_table_sql)
     print(f"表 '{table_name}' 创建成功。")
 
-    # 3. 添加列备注 (Comments)
-    # PostgreSQL 使用 COMMENT ON COLUMN 语法
     comments_sql = [
         f"COMMENT ON COLUMN {table_name}.date_hour IS '统计小时点 (截断至整点)';",
         f"COMMENT ON COLUMN {table_name}.price_day_ahead_avg IS '日前出清均价 (元/MWh)';",
         f"COMMENT ON COLUMN {table_name}.total_wind_solar_pre_avg IS '风光预测总功率均值 (MW)';",
         f"COMMENT ON COLUMN {table_name}.tem_avg IS '平均气温 (℃)';",
         f"COMMENT ON COLUMN {table_name}.load_pre_avg IS '区域负荷预测均值 (MW)';",
-        # ... 你可以为每一列都加上备注
-        f"COMMENT ON COLUMN {table_name}.balance_pre_avg IS '供需差额预测均值 (MW)';"
+        f"COMMENT ON COLUMN {table_name}.balance_pre_avg IS '供需差额预测均值 (MW)';",
     ]
     
     for sql in comments_sql:
         cursor.execute(sql)
     
-    conn.commit() # 提交建表和注释操作
+    conn.commit()
     print("列备注添加成功。")
 
-    # 4. 将数据追加 (Append) 到已存在的表中
-    # 关键点：if_exists='append'
-    # method='multi' 可以提高插入速度
     df.to_sql(
         name=table_name,
         con=engine,
-        if_exists='append',  # 重要：改为 append
+        if_exists='append',
         index=False,
         method='multi',
-        chunksize=1000       # 分批提交，防止内存溢出或超时
+        chunksize=1000
     )
     
     print(f"数据成功追加到表 '{table_name}'，共 {len(df)} 条记录。")
 
 except Exception as e:
-    conn.rollback() # 出错回滚
+    conn.rollback()
     print(f"发生错误: {e}")
 finally:
     cursor.close()
