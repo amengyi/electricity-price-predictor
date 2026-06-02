@@ -51,15 +51,24 @@ class EnsembleModel:
         self.model_results = model_results
         self.method = method
         self.models = [m['model'] for m in model_results]
+        self.n_models = len(self.models)
     
     def predict(self, X):
-        predictions = np.array([model.predict(X) for model in self.models])
+        predictions = []
+        for model in self.models:
+            pred = model.predict(X)
+            predictions.append(pred)
+        
+        predictions = np.array(predictions)
         
         if self.method == 'simpleavg':
             return predictions.mean(axis=0)
         elif self.method == 'weighted':
             weights = np.array([1/(m['metrics']['RMSE'] + 1e-6) for m in self.model_results])
             weights = weights / weights.sum()
+            if len(weights) != predictions.shape[0]:
+                weights = weights[:predictions.shape[0]]
+                weights = weights / weights.sum()
             return (predictions * weights.reshape(-1, 1)).sum(axis=0)
         elif self.method == 'median':
             return np.median(predictions, axis=0)
