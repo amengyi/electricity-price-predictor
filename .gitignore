@@ -1,0 +1,11 @@
+# 忽略敏感文件
+config.py
+*.pyc
+__pycache__/
+*.log
+.DS_Store
+
+# 忽略模型文件（可选）
+*.pkl
+*.joblib
+*.h5

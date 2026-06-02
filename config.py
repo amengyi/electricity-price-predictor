@@ -1,33 +1,24 @@
-DB_CONFIG = {
-    'host': 'pgm-bp1q60i1ca0xnwv98o.pg.rds.aliyuncs.com',
-    'port': 1921,
-    'database': 'bopha',
-    'user': 'seniverse',
-    'password': 'mpr3uOFnnM5bHtl'
-}
+import os
 
-RAW_FEATURES = [
-    'total_wind_solar_pre_avg',
-    'solar_radiation_avg',
-    'cloud_avg',
-    'dir_avg',
-    'heat_avg',
-    'hum_avg',
-    'pm10_avg',
-    'pm2_5_avg',
-    'pre_avg',
-    'tem_avg',
-    'wind_speed_avg',
-    'wind10_avg',
-    'wind100_avg',
-    'wind120_avg',
-    'wind180_avg',
-    'load_pre_avg',
-    'out_pre_avg',
-    'non_market_pre_avg',
-    'hydro_pre_avg',
-    'power_pre_avg',
-    'balance_pre_avg'
-]
+def get_db_config():
+    """从环境变量获取数据库配置"""
+    return {
+        'host': os.environ.get('DB_HOST', 'pgm-bp1q60i1ca0xnwv98o.pg.rds.aliyuncs.com'),
+        'port': os.environ.get('DB_PORT', '1921'),
+        'database': os.environ.get('DB_NAME', 'bopha'),
+        'user': os.environ.get('DB_USER', 'seniverse'),
+        'password': os.environ.get('DB_PASSWORD', '')
+    }
 
-TARGET_COLUMN = 'price_day_ahead_avg'
+def get_source_db_config():
+    """从环境变量获取源数据库配置"""
+    return {
+        'host': os.environ.get('SOURCE_DB_HOST', 'rm-2ze5i2i2u4x7n3q1.mysql.rds.aliyuncs.com'),
+        'port': os.environ.get('SOURCE_DB_PORT', '3306'),
+        'database': os.environ.get('SOURCE_DB_NAME', 'bopha_anhui'),
+        'user': os.environ.get('SOURCE_DB_USER', 'seniverse'),
+        'password': os.environ.get('SOURCE_DB_PASSWORD', '')
+    }
+
+DB_CONFIG = get_db_config()
+SOURCE_DB_CONFIG = get_source_db_config()
