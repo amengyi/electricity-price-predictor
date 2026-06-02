@@ -1,0 +1,9 @@
+{
+  "name": "electricity-price-predictor",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo 'Build completed'",
+    "start": "python server.py"
+  },
+  "dependencies": {}
+}
